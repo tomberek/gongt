@@ -17,45 +17,81 @@
 package main
 
 import (
+	"bufio"
 	"flag"
+	"io"
+	"log"
 	"os"
 	"runtime"
+	"strconv"
+	"strings"
+	"sync"
 
 	"github.com/kpango/glg"
 	"github.com/yahoojapan/gongt"
-	"gonum.org/v1/hdf5"
 )
 
-func getVectors(path, key string) ([][]float64, error) {
-	f, err := hdf5.OpenFile(path, hdf5.F_ACC_RDONLY)
+func getVectorsChan(path string, vecChan chan<- []float64) ([][]float64, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	dset, err := f.OpenDataset(key)
+	r := bufio.NewReader(f)
+	var result [][]float64
+	for {
+		line, err := r.ReadString('\n')
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		floats, err := parseFloats(line)
+		if err != nil {
+			log.Fatal(err)
+		}
+		vecChan <- floats
+		result = append(result, floats)
+	}
+	close(vecChan)
+	return result, nil
+}
+func getVectors(path string) ([][]float64, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	space := dset.Space()
-	dims, _, err := space.SimpleExtentDims()
-	if err != nil {
-		return nil, err
+	r := bufio.NewReader(f)
+	var result [][]float64
+	for {
+		line, err := r.ReadString('\n')
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		floats, err := parseFloats(line)
+		if err != nil {
+			log.Fatal(err)
+		}
+		result = append(result, floats)
 	}
-	v := make([]float32, space.SimpleExtentNPoints())
-	if err := dset.Read(&v); err != nil {
-		return nil, err
-	}
-
-	row := int(dims[0])
-	col := int(dims[1])
-
-	vec := make([][]float64, row)
-	for i := 0; i < row; i++ {
-		vec[i] = make([]float64, col)
-		for j := 0; j < col; j++ {
-			vec[i][j] = float64(v[i*col+j])
+	return result, nil
+}
+func parseFloats(s string) ([]float64, error) {
+	var (
+		fields = strings.Fields(s)
+		floats = make([]float64, len(fields))
+		err    error
+	)
+	for i, f := range fields {
+		floats[i], err = strconv.ParseFloat(f, 64)
+		if err != nil {
+			return nil, err
 		}
 	}
-	return vec, nil
+	return floats, nil
 }
 
 func create(name, path string) {
@@ -63,30 +99,73 @@ func create(name, path string) {
 		glg.Infof("[%s] %s exists", name, path)
 		return
 	}
-	vectors, err := getVectors(path, "train")
+	vecChan := make(chan []float64)
+	done := make(chan struct{})
+	go func(vecChan <-chan []float64) {
+		v := <-vecChan
+		n := gongt.New("a").SetObjectType(gongt.Float).
+			SetDimension(len(v)).
+			SetBulkInsertChunkSize(200).
+			SetCreationEdgeSize(10).
+			SetSearchEdgeSize(40).
+			SetDistanceType(gongt.Cosine).
+			Open()
+
+		defer n.Close()
+		var wg sync.WaitGroup
+
+		n.Insert(v)
+		var i = 1
+		for v := range vecChan {
+			n.Insert(v)
+			i = i + 1
+			if i%100000 == 0 {
+				glg.Infof("Processing: %s objects", i)
+				wg.Add(1)
+				go func(wg *sync.WaitGroup) {
+					defer wg.Done()
+					if err := n.CreateAndSaveIndex(30); err != nil {
+						glg.Warn(err)
+					}
+					glg.Infof("Saved: %s objects", i)
+				}(&wg)
+			}
+		}
+		wg.Wait()
+		if err := n.CreateAndSaveIndex(30); err != nil {
+			glg.Warn(err)
+		}
+		glg.Info("Finished with indexing")
+		close(done)
+	}(vecChan)
+
+	_, err := getVectorsChan(path, vecChan)
 	if err != nil {
 		glg.Warn(err)
 		return
 	}
-	glg.Infof("[%s] %d items", name, len(vectors))
-	defer glg.Infof("[%s] done", name)
+	<-done
+	defer glg.Infof("done")
 
-	n := gongt.New(name).SetObjectType(gongt.Float).SetDimension(len(vectors[0])).Open()
-	defer n.Close()
-
-	for _, v := range vectors {
-		n.Insert(v)
-	}
-	if err := n.CreateAndSaveIndex(runtime.NumCPU()); err != nil {
-		glg.Warn(err)
-	}
+	// _, errs := n.BulkInsert(vectors)
+	// for _, err := range errs {
+	// 	if err != nil {
+	// 		glg.Warn(err)
+	// 		return
+	// 	}
+	// }
+	_ = runtime.NumCPU()
+	// if err := n.CreateAndSaveIndex(runtime.NumCPU()); err != nil {
+	// if err := n.CreateAndSaveIndex(16); err != nil {
+	// 	glg.Warn(err)
+	// }
 }
 
 func search(name, path string) {
 	n := gongt.New(name).Open()
 	defer n.Close()
 
-	vectors, err := getVectors(path, "test")
+	vectors, err := getVectors(path)
 	if err != nil {
 		glg.Warn(err)
 		return
