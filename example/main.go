@@ -19,6 +19,7 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -121,18 +122,18 @@ func create(name, path string) {
 			i = i + 1
 			if i%100000 == 0 {
 				glg.Infof("Processing: %s objects", i)
-				wg.Add(1)
-				go func(wg *sync.WaitGroup) {
-					defer wg.Done()
-					if err := n.CreateAndSaveIndex(30); err != nil {
-						glg.Warn(err)
-					}
-					glg.Infof("Saved: %s objects", i)
-				}(&wg)
+				// wg.Add(1)
+				// go func(wg *sync.WaitGroup) {
+				// 	defer wg.Done()
+				// if err := n.CreateAndSaveIndex(runtime.NumCPU()); err != nil {
+				// 	glg.Warn(err)
+				// }
+				// glg.Infof("Saved: %s objects", i)
+				// }(&wg)
 			}
 		}
 		wg.Wait()
-		if err := n.CreateAndSaveIndex(30); err != nil {
+		if err := n.CreateAndSaveIndex(runtime.NumCPU()); err != nil {
 			glg.Warn(err)
 		}
 		glg.Info("Finished with indexing")
@@ -154,7 +155,6 @@ func create(name, path string) {
 	// 		return
 	// 	}
 	// }
-	_ = runtime.NumCPU()
 	// if err := n.CreateAndSaveIndex(runtime.NumCPU()); err != nil {
 	// if err := n.CreateAndSaveIndex(16); err != nil {
 	// 	glg.Warn(err)
@@ -179,9 +179,29 @@ func search(name, path string) {
 	}
 }
 
+func extract(name string) {
+	n := gongt.New(name).Open()
+	defer n.Close()
+
+	res, err := n.ExtractGraph()
+	if err != nil {
+		glg.Warn(err)
+		return
+	}
+	for _, item := range res {
+		var line []string
+		for _, s := range item {
+			line = append(line, fmt.Sprintf("%d %f", s.ID, s.Distance))
+		}
+		output := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(line)), "\t"), "[]")
+		fmt.Println(output)
+	}
+}
+
 func main() {
 	c := flag.Bool("create", false, "run create")
 	s := flag.Bool("search", false, "run search")
+	e := flag.Bool("extract", false, "run extract")
 
 	n := flag.String("name", "", "dataset name")
 	p := flag.String("path", "", "dataset path")
@@ -192,5 +212,8 @@ func main() {
 	}
 	if *s {
 		search(*n, *p)
+	}
+	if *e {
+		extract(*n)
 	}
 }
