@@ -40,8 +40,8 @@ type (
 	}
 	// SearchResult is struct for comfortable use in Go
 	SearchResult struct {
-		ID       int
-		Distance float64
+		ID       int32
+		Distance float32
 	}
 	// NGT is gongt base struct
 	NGT struct {
@@ -62,6 +62,68 @@ type (
 		BulkInsertChunkSize int
 	}
 )
+
+// StrictSearch is C type stricted search function
+func (n *NGT) ExtractGraph() ([][]SearchResult, error) {
+	ebuf := C.ngt_create_error_object()
+	defer C.ngt_destroy_error_object(ebuf)
+
+	results := C.ngt_create_empty_objects(ebuf)
+	defer C.ngt_destroy_objects(results)
+	if results == nil {
+		return nil, newGoError(ebuf)
+	}
+
+	n.mu.RLock()
+	ret := C.ngt_extract_graph(n.index, results, ebuf)
+	n.mu.RUnlock()
+	if ret == ErrorCode {
+		return nil, newGoError(ebuf)
+	}
+	g := (C.NGTObjects)(unsafe.Pointer(results))
+	var vector C.NGTVector
+	C.ngt_get_object(&vector, g, C.uint32_t(0), ebuf)
+	// fmt.Printf("vector: %+v\n", vector)
+	// fmt.Printf("size: %+v\n", vector.size/6)
+
+	rsize := int(vector.size / 6)
+	vs := (*[(1 << 31)]C.NGTObjects)(vector.vector)[:vector.size:vector.size]
+	// fmt.Printf("vs: %+v\n", vs[0:6:24])
+	// fmt.Printf("vs: %+v\n", &vs[0])
+
+	_ = rsize
+	var final [][]SearchResult
+	for i := 0; i < rsize; i++ {
+		// 12 * 4 bytes per std::vector
+		// 8 * 6 bytes per std::vector
+		// 16 * 3 bytes per std::vector
+		g2 := (C.NGTObjects)(unsafe.Pointer(&vs[i*3]))
+		C.ngt_get_object(&vector, g2, C.uint32_t(0), ebuf)
+		slice := (*[(1 << 31) / unsafe.Sizeof(SearchResult{})]SearchResult)(vector.vector)[: vector.size/2 : vector.size/2]
+
+		for _, s := range slice {
+			s.ID -= 1
+		}
+		final = append(final, slice)
+	}
+	//fmt.Printf("%+v\n", final[12948][:])
+	// for _, item := range final {
+	// 	fmt.Printf("%+v\n", item)
+	// println(len(item))
+	// for v, vec := range item {
+	// 	if vec.ID == 0 {
+	// 		fmt.Printf("%d,%+v\n", i, item)
+	// 		fmt.Printf("len %d\n", len(item))
+	// 		fmt.Printf("%d,%+v\n", v, vec)
+	// 		return final, nil
+	// 		break
+	// 	}
+	// }
+	// }
+	return final, nil
+	// println("done")
+	// return result, nil
+}
 
 // ObjectType is alias of object type in NGT
 type ObjectType int
@@ -498,7 +560,7 @@ func (n *NGT) Search(vec []float64, size int, epsilon float64) ([]SearchResult, 
 	result := make([]SearchResult, len(res))
 	for _, val := range res {
 		if val.Error == nil {
-			result[idx] = SearchResult{int(val.ID), float64(val.Distance)}
+			result[idx] = SearchResult{int32(val.ID), float32(val.Distance)}
 			idx++
 		}
 	}

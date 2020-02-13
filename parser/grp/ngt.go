@@ -1,14 +1,16 @@
+package grp
+
 // This is a generated file! Please edit source .ksy file and use kaitai-struct-compiler to rebuild
 
 import "github.com/kaitai-io/kaitai_struct_go_runtime/kaitai"
 
 type Ngt struct {
-	Header *Ngt_Header
-	Stuff uint32
-	Delim []byte
-	Lines []*Ngt_Line
-	_io *kaitai.Stream
-	_root *Ngt
+	Header  *Ngt_Header
+	Stuff   uint32
+	Delim   []byte
+	Lines   []*Ngt_Line
+	_io     *kaitai.Stream
+	_root   *Ngt
 	_parent interface{}
 }
 
@@ -45,10 +47,11 @@ func (this *Ngt) Read(io *kaitai.Stream, parent interface{}, root *Ngt) (err err
 	}
 	return err
 }
+
 type Ngt_Header struct {
-	Length uint32
-	_io *kaitai.Stream
-	_root *Ngt
+	Length  uint32
+	_io     *kaitai.Stream
+	_root   *Ngt
 	_parent interface{}
 }
 
@@ -64,13 +67,14 @@ func (this *Ngt_Header) Read(io *kaitai.Stream, parent interface{}, root *Ngt) (
 	this.Length = uint32(tmp5)
 	return err
 }
+
 type Ngt_Line struct {
-	Delim []byte
+	Delim      []byte
 	LineHeader *Ngt_Header
-	Items []*Ngt_Item
-	_io *kaitai.Stream
-	_root *Ngt
-	_parent *Ngt
+	Items      []*Ngt_Item
+	_io        *kaitai.Stream
+	_root      *Ngt
+	_parent    *Ngt
 }
 
 func (this *Ngt_Line) Read(io *kaitai.Stream, parent *Ngt, root *Ngt) (err error) {
@@ -101,12 +105,13 @@ func (this *Ngt_Line) Read(io *kaitai.Stream, parent *Ngt, root *Ngt) (err error
 	}
 	return err
 }
+
 type Ngt_Item struct {
-	Id uint32
+	Id       uint32
 	Distance float32
-	_io *kaitai.Stream
-	_root *Ngt
-	_parent *Ngt_Line
+	_io      *kaitai.Stream
+	_root    *Ngt
+	_parent  *Ngt_Line
 }
 
 func (this *Ngt_Item) Read(io *kaitai.Stream, parent *Ngt_Line, root *Ngt) (err error) {
