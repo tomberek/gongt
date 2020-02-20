@@ -18,6 +18,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
@@ -32,6 +33,38 @@ import (
 	"github.com/yahoojapan/gongt"
 )
 
+const SIZEOF_FLOAT64 = 8
+
+func getVectorsChanBinary(path string, vecChan chan<- []float64) ([][]float64, error) {
+	fd, err := os.Open(path)
+	defer close(vecChan)
+	if err != nil {
+		return nil, err
+	}
+	s, err := fd.Stat()
+	if err != nil {
+		return nil, err
+	}
+	_ = s
+	var floatSlice [1024]float64
+	for {
+		err = binary.Read(fd, binary.LittleEndian, &floatSlice)
+		if err == io.EOF {
+			err = nil
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		vecChan <- floatSlice[:]
+	}
+	if err != nil {
+		return nil, err
+	}
+	// Don't accumulate, TODO: remove return
+	var res [][]float64
+	return res, nil
+}
 func getVectorsChan(path string, vecChan chan<- []float64) ([][]float64, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -95,7 +128,7 @@ func parseFloats(s string) ([]float64, error) {
 	return floats, nil
 }
 
-func create(name, path string) {
+func create(name, path string, binary bool) {
 	if _, err := os.Stat(name); err == nil {
 		glg.Infof("[%s] %s exists", name, path)
 		return
@@ -107,7 +140,7 @@ func create(name, path string) {
 		n := gongt.New("a").SetObjectType(gongt.Float).
 			SetDimension(len(v)).
 			SetBulkInsertChunkSize(200).
-			SetCreationEdgeSize(10).
+			SetCreationEdgeSize(20).
 			SetSearchEdgeSize(40).
 			SetDistanceType(gongt.Cosine).
 			Open()
@@ -140,7 +173,12 @@ func create(name, path string) {
 		close(done)
 	}(vecChan)
 
-	_, err := getVectorsChan(path, vecChan)
+	var err error
+	if binary {
+		_, err = getVectorsChanBinary(path, vecChan)
+	} else {
+		_, err = getVectorsChan(path, vecChan)
+	}
 	if err != nil {
 		glg.Warn(err)
 		return
@@ -200,6 +238,7 @@ func extract(name string) {
 
 func main() {
 	c := flag.Bool("create", false, "run create")
+	b := flag.Bool("binary", false, "create with binary format")
 	s := flag.Bool("search", false, "run search")
 	e := flag.Bool("extract", false, "run extract")
 
@@ -208,7 +247,7 @@ func main() {
 
 	flag.Parse()
 	if *c {
-		create(*n, *p)
+		create(*n, *p, *b)
 	}
 	if *s {
 		search(*n, *p)

@@ -101,9 +101,6 @@ func (n *NGT) ExtractGraph() ([][]SearchResult, error) {
 		C.ngt_get_object(&vector, g2, C.uint32_t(0), ebuf)
 		slice := (*[(1 << 31) / unsafe.Sizeof(SearchResult{})]SearchResult)(vector.vector)[: vector.size/2 : vector.size/2]
 
-		for _, s := range slice {
-			s.ID -= 1
-		}
 		final = append(final, slice)
 	}
 	//fmt.Printf("%+v\n", final[12948][:])
