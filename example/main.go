@@ -236,7 +236,26 @@ func extract(name string) {
 	}
 }
 
+func append_(name, path string) {
+	n := gongt.New(name).Open()
+	defer n.Close()
+
+	vectors, err := getVectors(path)
+	if err != nil {
+		glg.Warn(err)
+		return
+	}
+	glg.Infof("[%s] %d items", name, len(vectors))
+	defer glg.Infof("[%s] done", name)
+
+	for _, v := range vectors {
+		n.Insert(v)
+	}
+	n.SaveIndex()
+}
+
 func main() {
+	a := flag.Bool("append", false, "run append")
 	c := flag.Bool("create", false, "run create")
 	b := flag.Bool("binary", false, "create with binary format")
 	s := flag.Bool("search", false, "run search")
@@ -246,6 +265,9 @@ func main() {
 	p := flag.String("path", "", "dataset path")
 
 	flag.Parse()
+	if *a {
+		append_(*n, *p)
+	}
 	if *c {
 		create(*n, *p, *b)
 	}

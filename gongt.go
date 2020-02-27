@@ -63,7 +63,7 @@ type (
 	}
 )
 
-// StrictSearch is C type stricted search function
+// ExtractGraph is an added thing
 func (n *NGT) ExtractGraph() ([][]SearchResult, error) {
 	ebuf := C.ngt_create_error_object()
 	defer C.ngt_destroy_error_object(ebuf)
